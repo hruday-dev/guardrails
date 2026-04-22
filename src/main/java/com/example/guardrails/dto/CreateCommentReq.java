@@ -3,7 +3,7 @@ package com.example.guardrails.dto;
 import lombok.Data;
 
 @Data
-public class CreateCommentReqDTO{
+public class CreateCommentReq {
 
     private Long authorId;
     private String authorType;

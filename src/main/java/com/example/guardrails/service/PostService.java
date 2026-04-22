@@ -1,6 +1,6 @@
 package com.example.guardrails.service;
 
-import com.example.guardrails.dto.CreateCommentReqDTO;
+import com.example.guardrails.dto.CreateCommentReq;
 import com.example.guardrails.dto.CreatePostReq;
 import com.example.guardrails.entity.AuthorType;
 import com.example.guardrails.entity.Comment;
@@ -17,6 +17,8 @@ public class PostService {
     PostRepo postRepo;
     @Autowired
     CommentRepo commentRepo;
+    @Autowired
+    RedisService redisService;
 
     public Post createPost(CreatePostReq request) {
         Post post = new Post();
@@ -27,17 +29,54 @@ public class PostService {
         return postRepo.save(post);
     }
 
-    public Comment addComment(Long id,  CreateCommentReqDTO request) {
+    public Comment addComment(Long id,  CreateCommentReq request) {
         Post post = postRepo.findById(id).orElseThrow(() -> new PostNotFound("Post not Found"));
-        Mapper.toEntity(post);
 
-        return null;
+        if (request.getDepthLevel() > 20) {
+            throw new RuntimeException("Max depth exceeded");
+        }
+        boolean isBot = request.getAuthorType().equals("BOT");
+
+        if (isBot) {
+
+            Long botId = request.getAuthorId();
+            Long humanId = post.getAuthorId(); // assuming post owner is human
+
+            // 3️⃣ Cooldown check
+            if (redisService.isCooldownActive(botId, humanId)) {
+                throw new RuntimeException("Cooldown active");
+            }
+
+            // 4️⃣ Horizontal Cap (Atomic)
+            Long count = redisService.incrementBotCount(post.getId());
+
+            if (count > 100) {
+                throw new RuntimeException("429 Too Many Bot Replies");
+            }
+
+            // 5️⃣ Set cooldown
+            redisService.setCooldown(botId, humanId);
+        }
+        Comment comment = new Comment();
+        comment.setPostId(post.getId());
+        comment.setAuthorId(request.getAuthorId());
+        comment.setAuthorType(AuthorType.valueOf(request.getAuthorType()));
+        comment.setContent(request.getContent());
+        comment.setDepthLevel(request.getDepthLevel());
+
+        if (isBot) {
+            redisService.incrementVirality(post.getId(), 1);
+        } else {
+            redisService.incrementVirality(post.getId(), 50);
+        }
+
+        return commentRepo.save(comment);
     }
 
-    public String likePost(Long id) {
+    public Long likePost(Long id) {
         if(!postRepo.existsById(id)){
             throw new RuntimeException("Post not Found");
         }
-        return "Post Liked" + id;
+        return redisService.incrementVirality( id, 20);
     }
 }
