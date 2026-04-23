@@ -8,17 +8,20 @@ import com.example.guardrails.entity.Post;
 import com.example.guardrails.exceptions.PostNotFound;
 import com.example.guardrails.repo.CommentRepo;
 import com.example.guardrails.repo.PostRepo;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+@RequiredArgsConstructor
 @Service
 public class PostService {
-    @Autowired
-    PostRepo postRepo;
+
     @Autowired
     CommentRepo commentRepo;
     @Autowired
     RedisService redisService;
+    private  final PostRepo postRepo;
+    private final NotificationRedisService notificationRedisService;
 
     public Post createPost(CreatePostReq request) {
         Post post = new Post();
@@ -40,21 +43,15 @@ public class PostService {
         if (isBot) {
 
             Long botId = request.getAuthorId();
-            Long humanId = post.getAuthorId(); // assuming post owner is human
-
-            // 3️⃣ Cooldown check
+            Long humanId = post.getAuthorId();
             if (redisService.isCooldownActive(botId, humanId)) {
                 throw new RuntimeException("Cooldown active");
             }
-
-            // 4️⃣ Horizontal Cap (Atomic)
             Long count = redisService.incrementBotCount(post.getId());
 
             if (count > 100) {
                 throw new RuntimeException("429 Too Many Bot Replies");
             }
-
-            // 5️⃣ Set cooldown
             redisService.setCooldown(botId, humanId);
         }
         Comment comment = new Comment();
@@ -65,9 +62,17 @@ public class PostService {
         comment.setDepthLevel(request.getDepthLevel());
 
         if (isBot) {
-            redisService.incrementVirality(post.getId(), 1);
-        } else {
-            redisService.incrementVirality(post.getId(), 50);
+
+            Long userId = post.getAuthorId(); // post owner
+            String message = "Bot " + request.getAuthorId() + " replied to your post";
+
+            if (notificationRedisService.hasRecentNotification(userId)) {
+                notificationRedisService.queueNotification(userId, message);
+            } else {
+                System.out.println("Push Notification Sent to User: " + message);
+
+                notificationRedisService.setNotificationCooldown(userId);
+            }
         }
 
         return commentRepo.save(comment);
