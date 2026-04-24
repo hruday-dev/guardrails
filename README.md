@@ -1,6 +1,4 @@
-
-# Backend Engineering Assignment
-## Core API & Guardrails Microservice
+#Core API & Guardrails Microservice
 
 ## Overview
 
