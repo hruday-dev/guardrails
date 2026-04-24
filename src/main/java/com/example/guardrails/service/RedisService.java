@@ -14,25 +14,25 @@ public class RedisService {
         this.redisTemplate = redisTemplate;
     }
 
-    // =============================
-    // 🔥 VIRALITY SCORE
-    // =============================
+    // VIRALITY SCORE
     public Long incrementVirality(Long postId, int points) {
         String key = "post:" + postId + ":virality_score";
         return redisTemplate.opsForValue().increment(key, points);
     }
 
-    // =============================
-    // 🤖 BOT COUNT (Atomic)
-    // =============================
+    //  BOT COUNT
     public Long incrementBotCount(Long postId) {
         String key = "post:" + postId + ":bot_count";
         return redisTemplate.opsForValue().increment(key);
     }
 
-    // =============================
-    // ⏱ COOLDOWN
-    // =============================
+    public void decrementBotCount(Long postId) {
+        String key = "post:" + postId + ":bot_count";
+        redisTemplate.opsForValue().decrement(key);
+    }
+
+
+    //  BOT-HUMAN COOLDOWN
     public boolean isCooldownActive(Long botId, Long humanId) {
         String key = "cooldown:bot_" + botId + ":human_" + humanId;
         return Boolean.TRUE.equals(redisTemplate.hasKey(key));
@@ -42,4 +42,5 @@ public class RedisService {
         String key = "cooldown:bot_" + botId + ":human_" + humanId;
         redisTemplate.opsForValue().set(key, "1", Duration.ofMinutes(10));
     }
+
 }

@@ -6,22 +6,23 @@ import com.example.guardrails.entity.AuthorType;
 import com.example.guardrails.entity.Comment;
 import com.example.guardrails.entity.Post;
 import com.example.guardrails.exceptions.PostNotFound;
+import com.example.guardrails.repo.BotRepo;
 import com.example.guardrails.repo.CommentRepo;
 import com.example.guardrails.repo.PostRepo;
+import com.example.guardrails.repo.UserRepo;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @RequiredArgsConstructor
 @Service
 public class PostService {
 
-    @Autowired
-    CommentRepo commentRepo;
-    @Autowired
-    RedisService redisService;
-    private  final PostRepo postRepo;
+    private final CommentRepo commentRepo;
+    private final RedisService redisService;
+    private final PostRepo postRepo;
     private final NotificationRedisService notificationRedisService;
+    private final UserRepo userRepo;
+    private final BotRepo botRepo;
 
     public Post createPost(CreatePostReq request) {
         Post post = new Post();
@@ -50,6 +51,7 @@ public class PostService {
             Long count = redisService.incrementBotCount(post.getId());
 
             if (count > 100) {
+                redisService.decrementBotCount(post.getId());
                 throw new RuntimeException("429 Too Many Bot Replies");
             }
             redisService.setCooldown(botId, humanId);
